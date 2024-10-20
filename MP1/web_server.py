@@ -12,6 +12,7 @@ server_socket.bind(('localhost', 8080))
 server_socket.listen(5)
 print("Server is running on http://localhost:8080")
 
+# Function to handle request validation and response generation
 def handle_request(request):
     request_lines = request.splitlines()
     
@@ -31,14 +32,19 @@ def handle_request(request):
         if method not in ['GET']:
             return generate_response(501)
 
+        # Ensure the HTTP version is correct
+        if version != "HTTP/1.1":
+            return generate_response(400)
+
+        # Check if the Host header is present (as per HTTP/1.1 requirements)
+        headers = {line.split(":")[0].strip(): line.split(":")[1].strip() for line in request_lines[1:] if ":" in line}
+        if "Host" not in headers:
+            return generate_response(400)
+
         # Handle the GET method
         if method == 'GET':
             # Check for 'If-Modified-Since' header (for 304 response)
-            if_modified_since = None
-            for line in request_lines:
-                if line.startswith("If-Modified-Since:"):
-                    if_modified_since = line.split(":", 1)[1].strip()
-                    break
+            if_modified_since = headers.get("If-Modified-Since", None)
 
             # Construct the file path
             file_path = 'www' + path
@@ -62,9 +68,10 @@ def handle_request(request):
             else:
                 return generate_response(404)
 
-    # Return 400 if request is malformed
+    # Return 400 if request is malformed or missing required headers
     return generate_response(400)
 
+# Function to generate responses based on status codes
 def generate_response(status_code, content=None):
     # Default responses for each status code
     if status_code == 200:
