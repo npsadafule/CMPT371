@@ -7,7 +7,7 @@ from email.utils import parsedate_to_datetime
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # Bind the socket to the port
-server_socket.bind(('localhost', 8080))
+server_socket.bind(('0.0.0.0', 8080))  # Binds to all available interfaces
 
 # Listen for incoming connections
 server_socket.listen(5)
@@ -15,6 +15,9 @@ print("Server is running on http://localhost:8080")
 
 # Function to handle request validation and response generation
 def handle_request(request):
+    # Log the full raw request received by the server
+    print(f"Raw request: {request}")
+
     request_lines = request.splitlines()
     
     if len(request_lines) > 0:
@@ -24,7 +27,7 @@ def handle_request(request):
             return generate_response(400)
 
         if path == '/':
-            path = '/index.html'
+            path = '/test.html'  # Serve test.html by default
 
         if method not in ['GET']:
             return generate_response(501)
@@ -32,7 +35,12 @@ def handle_request(request):
         if version != "HTTP/1.1":
             return generate_response(400)
 
-        headers = {line.split(":")[0].strip(): line.split(":")[1].strip() for line in request_lines[1:] if ":" in line}
+        headers = {}
+        for line in request_lines[1:]:
+            if ":" in line:
+                key, value = line.split(":", 1)  # Split only on the first colon
+                headers[key.strip()] = value.strip()
+
         if "Host" not in headers:
             return generate_response(400)
 
@@ -43,16 +51,31 @@ def handle_request(request):
             if os.path.isfile(file_path):
                 if if_modified_since:
                     try:
+                        # Debugging: Log the If-Modified-Since header
+                        print(f"Received If-Modified-Since header: {if_modified_since}")
+
                         # Parse the If-Modified-Since header
                         if_modified_since_dt = parsedate_to_datetime(if_modified_since)
-                        file_modified_time = datetime.fromtimestamp(os.path.getmtime(file_path), timezone.utc)
 
-                        # Compare modification times
+                        # Add a check for None before proceeding
+                        if if_modified_since_dt is None:
+                            print("Failed to parse the If-Modified-Since header correctly.")
+                            return generate_response(400)  # Return 400 if the date can't be parsed
+
+                        print(f"Parsed If-Modified-Since as datetime: {if_modified_since_dt}")
+
+                        # Get the file's modification time
+                        file_modified_time = datetime.fromtimestamp(os.path.getmtime(file_path), timezone.utc)
+                        print(f"File modification time: {file_modified_time}")
+
+                        # Compare the file modification time with the If-Modified-Since header
                         if file_modified_time <= if_modified_since_dt:
                             return generate_response(304)
-                    except (TypeError, ValueError):
-                        return generate_response(400)  # Malformed If-Modified-Since header
+                    except (TypeError, ValueError) as e:
+                        print(f"Error parsing If-Modified-Since header: {e}")
+                        return generate_response(400)  # Return 400 for invalid date formats
 
+                # Return 200 OK with file content
                 with open(file_path, 'rb') as file:
                     content = file.read()
                 return generate_response(200, content)
