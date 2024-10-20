@@ -1,6 +1,7 @@
 import socket
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 # Create a TCP/IP socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,57 +19,47 @@ def handle_request(request):
     
     if len(request_lines) > 0:
         try:
-            # Extract the request method, path, and HTTP version
             method, path, version = request_lines[0].split()
         except ValueError:
-            # Malformed request line (e.g., missing elements)
             return generate_response(400)
 
-        # Normalize the path (root as /index.html)
         if path == '/':
             path = '/index.html'
 
-        # Check if the method is supported
         if method not in ['GET']:
             return generate_response(501)
 
-        # Ensure the HTTP version is correct
         if version != "HTTP/1.1":
             return generate_response(400)
 
-        # Check if the Host header is present (as per HTTP/1.1 requirements)
         headers = {line.split(":")[0].strip(): line.split(":")[1].strip() for line in request_lines[1:] if ":" in line}
         if "Host" not in headers:
             return generate_response(400)
 
-        # Handle the GET method
         if method == 'GET':
-            # Check for 'If-Modified-Since' header (for 304 response)
             if_modified_since = headers.get("If-Modified-Since", None)
+            file_path = '.' + path
 
-            # Construct the file path
-            file_path = 'www' + path
-            
-            # Check if the file exists
             if os.path.isfile(file_path):
-                # Check if the file was modified since the date in the header
                 if if_modified_since:
-                    file_modified_time = os.path.getmtime(file_path)
-                    file_modified_time = datetime.utcfromtimestamp(file_modified_time).strftime('%a, %d %b %Y %H:%M:%S GMT')
+                    try:
+                        # Parse the If-Modified-Since header
+                        if_modified_since_dt = parsedate_to_datetime(if_modified_since)
+                        file_modified_time = datetime.fromtimestamp(os.path.getmtime(file_path), timezone.utc)
 
-                    if file_modified_time <= if_modified_since:
-                        return generate_response(304)
+                        # Compare modification times
+                        if file_modified_time <= if_modified_since_dt:
+                            return generate_response(304)
+                    except (TypeError, ValueError):
+                        return generate_response(400)  # Malformed If-Modified-Since header
 
-                # Return 200 OK with file content
                 with open(file_path, 'rb') as file:
                     content = file.read()
                 return generate_response(200, content)
 
-            # If file not found, return 404
             else:
                 return generate_response(404)
 
-    # Return 400 if request is malformed or missing required headers
     return generate_response(400)
 
 # Function to generate responses based on status codes
