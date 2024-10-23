@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import threading
+import time
 
 # Function to handle request validation and response generation
 def handle_request(client_connection):
@@ -12,7 +13,7 @@ def handle_request(client_connection):
         print(f"Raw request: {request}")
 
         request_lines = request.splitlines()
-        
+
         if len(request_lines) > 0:
             try:
                 method, path, version = request_lines[0].split()
@@ -48,7 +49,7 @@ def handle_request(client_connection):
                 if os.path.isfile(file_path):
                     if if_modified_since:
                         try:
-                            # Debugging: Log the If-Modified-Since header
+                            # Log the If-Modified-Since header
                             print(f"Received If-Modified-Since header: {if_modified_since}")
 
                             # Parse the If-Modified-Since header
@@ -75,7 +76,15 @@ def handle_request(client_connection):
                     # Return 200 OK with file content
                     with open(file_path, 'rb') as file:
                         content = file.read()
-                    client_connection.sendall(generate_response(200, content).encode('utf-8'))
+                    
+                    # Send response in chunks to simulate HOL blocking avoidance
+                    client_connection.sendall("HTTP/1.1 200 OK\r\n".encode('utf-8'))
+                    client_connection.sendall("Content-Type: text/html\r\n\r\n".encode('utf-8'))
+                    
+                    for i in range(0, len(content), 1024):
+                        client_connection.sendall(content[i:i+1024])
+                        time.sleep(0.1)  # Simulate delay between sending chunks
+
                     return
 
                 else:
