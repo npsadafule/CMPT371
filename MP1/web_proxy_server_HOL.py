@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import threading
 
+# Define frame size 
+FRAME_SIZE = 1024  # 1 KB per frame
+
 # Function to handle web server requests (serving local files)
 def handle_web_request(client_connection):
     try:
@@ -12,7 +15,7 @@ def handle_web_request(client_connection):
         print(f"Raw request: {request}")
 
         request_lines = request.splitlines()
-        
+
         if len(request_lines) > 0:
             try:
                 method, path, version = request_lines[0].split()
@@ -49,7 +52,6 @@ def handle_web_request(client_connection):
                     if if_modified_since:
                         try:
                             print(f"Received If-Modified-Since header: {if_modified_since}")
-
                             if_modified_since_dt = parsedate_to_datetime(if_modified_since)
                             print(f"Parsed If-Modified-Since date: {if_modified_since_dt}")
 
@@ -70,9 +72,13 @@ def handle_web_request(client_connection):
                             client_connection.sendall(generate_response(400).encode('utf-8'))
                             return
 
+                    # Serve file in frames
                     with open(file_path, 'rb') as file:
-                        content = file.read()
-                    client_connection.sendall(generate_response(200, content).encode('utf-8'))
+                        while True:
+                            content = file.read(FRAME_SIZE)
+                            if not content:
+                                break
+                            client_connection.sendall(generate_response(200, content).encode('utf-8'))
                     return
 
                 else:
@@ -86,8 +92,7 @@ def handle_web_request(client_connection):
 def handle_proxy_request(client_connection, request):
     try:
         origin_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        origin_server.connect(('example.com', 80))
-
+        origin_server.connect(('example.com', 80)) 
         origin_server.sendall(request)
 
         while True:
@@ -127,7 +132,7 @@ def generate_response(status_code, content=None):
     if status_code == 200:
         response_line = "HTTP/1.1 200 OK\r\n"
         headers = "Content-Type: text/html\r\n\r\n"
-        return response_line + headers + content.decode('utf-8')
+        return response_line + headers + content.decode('utf-8') if content else response_line + headers
     
     elif status_code == 304:
         return "HTTP/1.1 304 Not Modified\r\n\r\n"
@@ -149,7 +154,7 @@ server_socket.bind(('0.0.0.0', 8080))  # Binds to all available interfaces
 
 # Listen for incoming connections
 server_socket.listen(10)
-print("Combined Web/Proxy server is running on http://localhost:8080")
+print("Combined Web/Proxy server with HOL blocking mitigation is running on http://localhost:8080")
 
 # Multithreading: handle multiple clients concurrently
 def start_server():
