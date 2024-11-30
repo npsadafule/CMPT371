@@ -123,7 +123,6 @@ def rdt_receive():
             continue
 
     print("All data received.")
-    # Do something with received_data if needed
     sock.close()
 
 if __name__ == "__main__":
